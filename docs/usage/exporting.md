@@ -12,13 +12,17 @@ If the bin is too large for the configured bed size or the bin is separated by t
 
 ### 3MF
 
-Compressed format with multi-body support. Only generated when the bin has text labels, because the label geometry is stored as a separate body for multi-colour printing. The bin body and text body are exported as distinct objects in the 3MF file.
+Compressed format with multi-body support, generated for every bin. The file holds a single object whose parts are the bin (`bin`), any text labels (`labels`), and a print-in-place contrast insert (`insert`). Slicers load it as one multi-part object with every part where it was modelled, so you only need to assign a filament to each part. A loose contrast insert is not included; it stays a separate STL.
 
-Internally uses trimesh for the 3MF scene assembly. The bin and text manifolds are converted to trimesh meshes and exported as named geometries.
+The 3MF always holds the whole bin. It is not split with oversized bins.
+
+Internally uses trimesh for the 3MF scene assembly: each manifold becomes a named mesh under one parent node, which trimesh writes as one object built from components.
 
 ### Insert STL
 
 Available when **Contrast Insert** is enabled in the bin configuration. This is a separate STL of just the insert piece, intended for printing in a contrasting colour. Download it from the export menu alongside the main bin STL.
+
+With **Print in place** on, the insert STL is in the bin STL's coordinate frame and sits in the bottom of each pocket. The 3MF export already contains the insert as a part of the bin object. To use the STLs instead, import both files at once and load them as a single object with multiple parts so the slicer keeps their relative position, then assign the insert its own filament. The insert matches the unsplit bin STL only; it is not split with oversized bins.
 
 ## Tool export
 

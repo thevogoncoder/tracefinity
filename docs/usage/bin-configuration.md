@@ -14,8 +14,8 @@ Gridfinity is a modular storage system where bins snap into a baseplate grid. Ea
 | Cutout chamfer | 0-3mm | 0mm | Bevel on top edge of pockets |
 | Magnet diameter | 3-10mm | 6mm | Standard Gridfinity magnets are 6x2mm |
 | Magnet depth | 1-5mm | 2.4mm | Slightly deeper than magnet for press-fit |
-| Insert height | 0.5-10mm | 1.0mm | Only shown when insert is enabled |
-| Insert fit | 0-1mm | 0.2mm | Clearance shaved off insert edges so it drops into the pocket |
+| Insert height | 0.2-10mm | 1.0mm | Only shown when insert is enabled; set to 0.2mm when print in place is turned on |
+| Insert fit | 0-1mm | 0.2mm | Clearance shaved off insert edges so it drops into the pocket. Hidden and ignored for print-in-place inserts |
 | Bed size | 150-500mm | 256mm | For auto-splitting oversized bins |
 
 A 2u bin allows up to 7.25mm cutout depth; a 3u bin allows up to 14.25mm,
@@ -35,6 +35,8 @@ same physical maximum.
 **Raise lip** -- extends the wall and stacking lip upward by this many units (7mm each) above the floor face, leaving the interior open. Use it for shallow bins where a tool protrudes above the floor: the raised lip lets a stacked bin clear the protruding tool. 0 = standard (lip sits at the floor face). Shown only when the stacking lip is on.
 
 **Contrast insert** -- generates a separate STL to print in a different colour. The pocket is deepened automatically to accommodate the insert thickness.
+
+**Print in place** -- models the insert in the bottom of each pocket instead of as a loose piece on the bed. The insert STL shares the bin STL's coordinates, sits on each pocket floor (following per-cutout depth overrides), is clipped to the bin interior like the pocket, and has no fit clearance. Open the 3MF export, which already holds the insert as a part of the bin, or load both STLs together as one multi-part object in the slicer (PrusaSlicer, OrcaSlicer, and Bambu Studio usually offer this when you import several files at once), assign the insert a different filament, and the insert prints as the pocket floor with a filament change. Shown only when the contrast insert is on.
 
 **Partial Bins** -- disables individual grid cells, removing them from the shell.
 

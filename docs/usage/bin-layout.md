@@ -62,7 +62,7 @@ When the bin exceeds the configured bed size, the STL is automatically split. Th
 
 ## Insert display
 
-When **Contrast Insert** is enabled in the sidebar, the insert appears in the 3D preview as an orange piece alongside the main bin.
+When **Contrast Insert** is enabled in the sidebar, the insert appears in the 3D preview as an orange piece alongside the main bin. A print-in-place insert is shown in the bottom of its pockets, where it will print.
 
 ## Bin configuration
 
@@ -79,7 +79,9 @@ The sidebar controls all bin parameters:
 | Corners only | Place magnet holes at the four outer corners only. |
 | Stacking lip | Raised rim for stacking bins. |
 | Contrast Insert | Generates a separate insert STL for two-colour printing. |
+| Print in place | Model the insert in the pocket floors for a filament-change print. |
 | Insert Height | Thickness of the insert piece. |
+| Insert Fit | Clearance shaved off a loose insert so it drops into the pocket. |
 | Bed Size | Print bed dimension. Bins exceeding this are split automatically. |
 | Partial Bins | Disable individual grid cells in the bin. |
 

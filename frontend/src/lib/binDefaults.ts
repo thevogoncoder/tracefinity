@@ -22,6 +22,7 @@ export const FACTORY_BIN_CONFIG: BinConfig = {
   insert_enabled: false,
   insert_height: 1.0,
   insert_clearance: 0.2,
+  insert_in_place: false,
   half_grid_base: false,
   partial_bins: false,
   partial_bins_values: createPartialBinsValues(2, 2),

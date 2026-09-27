@@ -50,6 +50,7 @@ record, and `<artefact> not found` otherwise.
 - **Stacking lip top**: lip base + 4.4mm (d0=1.9 + d1=1.8 + d2=0.7). Do NOT use bounding box max Z.
 - **Maximum pocket depth**: `height_units * 7 - 4.75 - 2`mm, preserving the base and a 2mm floor. The lip and raised rim do not reduce this. At 1u the physical maximum is 0.25mm and takes precedence over the usual 5mm minimum, including for per-cutout overrides and insert allowances.
 - **Pocket extrude margin**: 0.01mm epsilon for boolean cleanliness.
+- **In-place insert**: with `insert_in_place`, each insert piece is extruded from its pocket floor (`wall top - resolved pocket depth`, per cutout) for `min(insert_height, pocket depth)`, using the same interior clip as the pocket cutter and no fit clearance. It shares the bin's XY frame, so the two STLs line up when loaded as one multi-part object. Loose inserts start at z=0; the preview relies on that difference to place the insert.
 
 ## Gridfinity Constants
 
@@ -146,4 +147,4 @@ With partial bins in cut mode, separated islands are exported via `decompose` in
 
 ## 3MF Export
 
-Embossed text labels produce a separate body for multi-colour printing. Both bin body and text body are exported as separate objects in the 3MF. Uses trimesh for export. Only generated when embossed labels exist.
+Generated for every bin, after the insert. The 3MF holds one object with a component per body: `bin`, `labels` (embossed text, when present) and `insert` (only for `insert_in_place`; a loose insert would overlap the bin's base). All components use the identity transform, so slicers keep them in their modelled positions and assign a filament per part. Uses trimesh for export: meshes hang off a single `tracefinity` parent node, which trimesh writes as a components object with one build item.
