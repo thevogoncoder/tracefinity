@@ -178,3 +178,86 @@ def test_generate_insert_with_hole(generator, output_path):
 
     assert result is True
     assert os.path.getsize(output_path) > 0
+
+
+# ── in-place inserts ──────────────────────────────────────────────────────────
+
+def _to_manifold(mesh):
+    import manifold3d as mf
+    import numpy as np
+    return mf.Manifold(mf.Mesh(
+        vert_properties=np.asarray(mesh.vertices, dtype=np.float32),
+        tri_verts=np.asarray(mesh.faces, dtype=np.uint32),
+    ))
+
+
+def _in_place_pair(tmp_path, polys, **overrides):
+    """Generate a bin and its in-place insert the way the route does."""
+    import trimesh
+
+    from app.models.schemas import GenerateRequest
+
+    params = dict(grid_x=2, grid_y=2, height_units=4, cutout_depth=10, stacking_lip=False,
+                  magnets=False, insert_enabled=True, insert_height=0.2,
+                  insert_clearance=0.5, insert_in_place=True)
+    params.update(overrides)
+    config = GenerateRequest(**params)
+    gen = ManifoldSTLGenerator()
+    bin_path, insert_path = tmp_path / "bin.stl", tmp_path / "insert.stl"
+    gen.generate_bin(polys, config, str(bin_path))
+    ox, oy = _grid_offsets(config.grid_x, config.grid_y)
+    assert gen.generate_insert(polys, config, str(insert_path), ox, oy) is True
+    return trimesh.load_mesh(bin_path), trimesh.load_mesh(insert_path)
+
+
+def test_in_place_insert_fills_pocket_floor(tmp_path):
+    bin_mesh, insert = _in_place_pair(tmp_path, [_make_polygon(10, 10, 20)])
+    # pocket spans the requested depth plus the insert allowance
+    floor = 4 * 7 - 10.2
+    assert insert.bounds[0, 2] == pytest.approx(floor, abs=1e-4)
+    assert insert.bounds[1, 2] == pytest.approx(floor + 0.2, abs=1e-4)
+    # fit clearance is ignored: the insert is the full pocket outline, in
+    # the bin's own coordinate frame
+    ox, oy = _grid_offsets()
+    assert insert.bounds[0, :2] == pytest.approx([10 + ox, -(30 + oy)], abs=1e-4)
+    assert insert.bounds[1, :2] == pytest.approx([30 + ox, -(10 + oy)], abs=1e-4)
+    # the insert occupies only empty pocket space and rests on the bin
+    body, part = _to_manifold(bin_mesh), _to_manifold(insert)
+    assert (body ^ part).volume() == pytest.approx(0, abs=1e-3)
+    assert (body + part).volume() == pytest.approx(body.volume() + part.volume(), rel=1e-6)
+    assert part.volume() == pytest.approx(20 * 20 * 0.2, rel=1e-4)
+
+
+def test_in_place_insert_follows_per_cutout_depth(tmp_path):
+    shallow = _make_polygon(5, 5, 15, poly_id="shallow")
+    deep = _make_polygon(50, 50, 15, poly_id="deep")
+    deep.depth_override = 15
+    _, insert = _in_place_pair(tmp_path, [shallow, deep])
+    parts = sorted(insert.split(only_watertight=True), key=lambda m: m.bounds[0, 2])
+    assert len(parts) == 2
+    assert parts[0].bounds[0, 2] == pytest.approx(28 - 15.2, abs=1e-4)
+    assert parts[1].bounds[0, 2] == pytest.approx(28 - 10.2, abs=1e-4)
+
+
+def test_in_place_insert_clipped_to_bin_interior(tmp_path):
+    # the tool overhangs the wall; the pocket is clipped, so is the insert
+    bin_mesh, insert = _in_place_pair(tmp_path, [_make_polygon(-10, 10, 30)])
+    body, part = _to_manifold(bin_mesh), _to_manifold(insert)
+    assert (body ^ part).volume() == pytest.approx(0, abs=1e-3)
+    assert insert.bounds[0, 0] == pytest.approx(-(2 * GF_GRID - 0.5) / 2 + 1.6, abs=1e-4)
+
+
+def test_in_place_insert_capped_by_shallow_pocket(tmp_path):
+    # 1u bins only allow a 0.25mm pocket; the insert must not rise above the wall top
+    _, insert = _in_place_pair(tmp_path, [_make_polygon(10, 10, 20)],
+                               height_units=1, cutout_depth=0.25, insert_height=1.0)
+    assert insert.bounds[0, 2] == pytest.approx(6.75, abs=1e-4)
+    assert insert.bounds[1, 2] == pytest.approx(7.0, abs=1e-4)
+
+
+def test_loose_insert_unchanged_by_in_place_default(generator, output_path):
+    config = FakeConfig()
+    ox, oy = _grid_offsets()
+    assert generator.generate_insert([_make_polygon(10, 10, 20)], config, output_path, ox, oy)
+    import trimesh
+    assert trimesh.load(output_path).bounds[0, 2] == pytest.approx(0)

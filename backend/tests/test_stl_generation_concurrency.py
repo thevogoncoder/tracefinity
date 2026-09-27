@@ -171,16 +171,21 @@ def test_uncached_generation_writes_output_and_hash(monkeypatch, tmp_path, legac
     calls = []
 
     class FakeGenerator:
-        def generate_bin(self, scaled, request, output_path, threemf_path):
+        def generate_bin(self, scaled, request, output_path):
             calls.append(output_path)
             assert scaled == []
             assert request == GenerateRequest()
-            assert threemf_path.endswith("generated.3mf")
             Path(output_path).write_bytes(b"stl")
             return object(), None
 
         def export_split_parts(self, *args):
             return []
+
+        def export_3mf(self, bin_body, text_body, insert_body, path):
+            assert path.endswith("generated.3mf")
+            assert insert_body is None
+            Path(path).write_bytes(b"3mf")
+            return True
 
     monkeypatch.setattr(routes, "stl_generator", FakeGenerator())
 
@@ -189,6 +194,7 @@ def test_uncached_generation_writes_output_and_hash(monkeypatch, tmp_path, legac
     )
 
     assert response.stl_url.endswith("/generated.stl")
+    assert response.threemf_url.endswith("/generated.3mf")
     assert (outputs / "generated.stl").read_bytes() == b"stl"
     assert (outputs / "generated.hash").read_text() == f"{routes.STL_GEOMETRY_VERSION}:input-hash"
     routes._run_generate(

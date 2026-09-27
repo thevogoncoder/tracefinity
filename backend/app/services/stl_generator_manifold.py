@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 from app.constants import GF_GRID
 
 # Bump when geometry changes so saved previews and exports regenerate.
-STL_GEOMETRY_VERSION = 2
+STL_GEOMETRY_VERSION = 3
 
 GF_HALF_GRID = GF_GRID / 2  # 21mm
 GF_HEIGHT_UNIT = 7.0
@@ -1315,12 +1315,24 @@ def _export_stl(m, path: str) -> None:
     tm.export(path)
 
 
-def _export_3mf(bin_m, text_m, path: str) -> None:
+def _export_3mf(bin_m, text_m, insert_m, path: str) -> None:
+    """One object whose parts are the bin, labels and in-place insert.
+
+    Every body hangs off a single parent node, which trimesh writes as one
+    3MF object with components. Slicers load that as one multi-part object,
+    keep each part where it was modelled, and let each take its own filament.
+    """
     import trimesh
 
     scene = trimesh.Scene()
-    scene.add_geometry(_manifold_to_trimesh(bin_m), node_name='bin', geom_name='bin')
-    scene.add_geometry(_manifold_to_trimesh(text_m), node_name='text', geom_name='text')
+    scene.graph.update(frame_to='tracefinity', frame_from=scene.graph.base_frame)
+    parts = [('bin', bin_m), ('labels', text_m), ('insert', insert_m)]
+    for name, m in parts:
+        if m is None or m.is_empty():
+            continue
+        scene.add_geometry(
+            _manifold_to_trimesh(m), node_name=name, geom_name=name, parent_node_name='tracefinity',
+        )
     data = scene.export(file_type='3mf')
     with open(path, 'wb') as f:
         f.write(data)
@@ -1334,7 +1346,6 @@ class ManifoldSTLGenerator:
         polygons: list[ScaledPolygon],
         config: GenerateRequest,
         output_path: str,
-        threemf_path: str | None = None,
     ):
         """Generate bin STL using manifold3d. Returns (bin_manifold, text_manifold)."""
         import manifold3d as mf
@@ -1459,14 +1470,21 @@ class ManifoldSTLGenerator:
             _export_stl(bin_body, output_path)
         logger.info("export_stl: %.2fs", time.monotonic() - t1)
 
-        # 3MF export (multi-colour)
-        if text_body and threemf_path:
-            try:
-                _export_3mf(bin_body, text_body, threemf_path)
-            except Exception:
-                logger.warning("3MF export failed, skipping", exc_info=True)
-
         return bin_body, text_body
+
+    def export_stl(self, body, path: str) -> None:
+        _export_stl(body, path)
+
+    def export_3mf(self, bin_body, text_body, insert_body, path: str) -> bool:
+        """Multi-part 3MF of the bin, labels and in-place insert (any may be absent)."""
+        t1 = time.monotonic()
+        try:
+            _export_3mf(bin_body, text_body, insert_body, path)
+        except Exception:
+            logger.warning("3MF export failed, skipping", exc_info=True)
+            return False
+        logger.info("export_3mf: %.2fs", time.monotonic() - t1)
+        return True
 
     def generate_insert(
         self,
@@ -1476,12 +1494,36 @@ class ManifoldSTLGenerator:
         offset_x: float,
         offset_y: float,
     ) -> bool:
+        insert = self.build_insert(polygons, config, offset_x, offset_y)
+        if insert is None:
+            return False
+        _export_stl(insert, output_path)
+        return True
+
+    def build_insert(
+        self,
+        polygons: list[ScaledPolygon],
+        config,
+        offset_x: float,
+        offset_y: float,
+    ):
+        """Contrast insert manifold, or None when no polygon produced a shape."""
         import manifold3d as mf
 
         insert_height = getattr(config, 'insert_height', 1.0)
-        # the insert must drop into the pocket cut from the same outline; FDM
-        # bias makes pockets undersized and positives oversized, so shrink
-        fit_clearance = getattr(config, 'insert_clearance', 0.2)
+        # in-place inserts share the bin's frame and sit on each pocket floor,
+        # so a slicer can merge both STLs into one multi-material object
+        in_place = getattr(config, 'insert_in_place', False)
+        if in_place:
+            wall_top_z = config.height_units * GF_HEIGHT_UNIT
+            max_depth = wall_top_z - GF_BASE_HEIGHT - 2
+            interior_rect = _interior_clip_rect(config)
+            # printed as one object with the bin, so it must fill the pocket
+            fit_clearance = 0.0
+        else:
+            # the insert must drop into the pocket cut from the same outline; FDM
+            # bias makes pockets undersized and positives oversized, so shrink
+            fit_clearance = getattr(config, 'insert_clearance', 0.2)
         shapes = []
         failed = 0
         for poly in polygons:
@@ -1501,6 +1543,19 @@ class ManifoldSTLGenerator:
                 ]
                 if len(shifted_hole) >= 3:
                     shifted_holes.append(shifted_hole)
+            z = 0.0
+            height = insert_height
+            if in_place:
+                # match the pocket cutter: same interior clip, same floor
+                shifted, shifted_holes = _clip_to_interior(shifted, shifted_holes, interior_rect)
+                if len(shifted) < 3:
+                    logger.warning("insert: polygon %s lies outside the bin interior", poly.id)
+                    failed += 1
+                    continue
+                pocket_depth = _resolve_pocket_depth(poly.depth_override, config, max_depth)
+                z = wall_top_z - pocket_depth
+                # shallow bins cap the pocket below the insert allowance
+                height = min(insert_height, pocket_depth)
             ring_sets = [(shifted, shifted_holes)]
             if fit_clearance > 0:
                 ring_sets = _shrink_rings(shifted, shifted_holes, fit_clearance)
@@ -1519,7 +1574,7 @@ class ManifoldSTLGenerator:
                     if cs.area() <= 0:
                         cs = mf.CrossSection([r[::-1] for r in rings], mf.FillRule.EvenOdd if has_holes else mf.FillRule.Positive)
                     if cs.area() > 0:
-                        shapes.append(mf.Manifold.extrude(cs, insert_height))
+                        shapes.append(mf.Manifold.extrude(cs, height).translate((0.0, 0.0, z)))
                         made += 1
                 if made == 0:
                     logger.warning("insert: empty cross-section for polygon %s", poly.id)
@@ -1530,12 +1585,10 @@ class ManifoldSTLGenerator:
 
         if not shapes:
             logger.error("insert generation produced no shapes (%d polygons, %d failed)", len(polygons), failed)
-            return False
+            return None
 
-        combined = mf.Manifold.batch_boolean(shapes, mf.OpType.Add)
-        _export_stl(combined, output_path)
-        logger.info("insert: exported %d shapes to %s", len(shapes), output_path)
-        return True
+        logger.info("insert: built %d shapes", len(shapes))
+        return mf.Manifold.batch_boolean(shapes, mf.OpType.Add)
 
     @staticmethod
     def _compute_split_points(total_mm: float, grid_count: float, bed_size: float) -> list[float]:

@@ -17,11 +17,25 @@ type CameraView = 'home' | 'top' | 'front' | 'right' | 'fit'
 
 type RenderMode = 'solid' | 'edges'
 
-function StlModel({ url, renderMode, color = '#5ab4de', edgeColor = '#1e3d5c' }: { url: string; renderMode: RenderMode; color?: string; edgeColor?: string }) {
+type Offset = [number, number, number]
+
+// centre on the bed: xy midpoint to the origin, lowest point on z=0
+function centreOnBed(box: THREE.Box3): Offset {
+  return [-(box.max.x + box.min.x) / 2, -(box.max.y + box.min.y) / 2, -box.min.z]
+}
+
+function StlModel({ url, renderMode, color = '#5ab4de', edgeColor = '#1e3d5c', placement = centreOnBed, onBounds }: {
+  url: string
+  renderMode: RenderMode
+  color?: string
+  edgeColor?: string
+  placement?: (box: THREE.Box3) => Offset
+  onBounds?: (box: THREE.Box3) => void
+}) {
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
   const [edgesGeometry, setEdgesGeometry] = useState<THREE.EdgesGeometry | null>(null)
+  const [bounds, setBounds] = useState<THREE.Box3 | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-
   useEffect(() => {
     const loader = new STLLoader()
     let disposed = false
@@ -35,16 +49,12 @@ function StlModel({ url, renderMode, color = '#5ab4de', edgeColor = '#1e3d5c' }:
         geo.computeVertexNormals()
 
         geo.computeBoundingBox()
-        const box = geo.boundingBox!
-        const centerX = (box.max.x + box.min.x) / 2
-        const centerY = (box.max.y + box.min.y) / 2
-        const minZ = box.min.z
-
-        geo.translate(-centerX, -centerY, -minZ)
+        const box = geo.boundingBox!.clone()
         loadedGeo = geo
         loadedEdges = new THREE.EdgesGeometry(geo, 30)
         setGeometry(geo)
         setEdgesGeometry(loadedEdges)
+        setBounds(box)
       },
       () => {},
       (err) => {
@@ -60,33 +70,39 @@ function StlModel({ url, renderMode, color = '#5ab4de', edgeColor = '#1e3d5c' }:
     }
   }, [url])
 
-  if (loadError || !geometry) return null
+  useEffect(() => {
+    if (bounds) onBounds?.(bounds)
+  }, [bounds, onBounds])
+
+  if (loadError || !geometry || !bounds) return null
 
   return (
     <group rotation={[-Math.PI / 2, 0, 0]}>
-      {renderMode === 'solid' ? (
-        <>
-          <mesh geometry={geometry}>
-            <meshStandardMaterial color={color} metalness={0} roughness={0.7} />
-          </mesh>
-          {edgesGeometry && (
-            <lineSegments geometry={edgesGeometry}>
-              <lineBasicMaterial color={edgeColor} linewidth={1} />
-            </lineSegments>
-          )}
-        </>
-      ) : (
-        <>
-          <mesh geometry={geometry}>
-            <meshStandardMaterial color="#27272a" metalness={0} roughness={1} transparent opacity={0.3} />
-          </mesh>
-          {edgesGeometry && (
-            <lineSegments geometry={edgesGeometry}>
-              <lineBasicMaterial color={color} linewidth={1} />
-            </lineSegments>
-          )}
-        </>
-      )}
+      <group position={placement(bounds)}>
+        {renderMode === 'solid' ? (
+          <>
+            <mesh geometry={geometry}>
+              <meshStandardMaterial color={color} metalness={0} roughness={0.7} />
+            </mesh>
+            {edgesGeometry && (
+              <lineSegments geometry={edgesGeometry}>
+                <lineBasicMaterial color={edgeColor} linewidth={1} />
+              </lineSegments>
+            )}
+          </>
+        ) : (
+          <>
+            <mesh geometry={geometry}>
+              <meshStandardMaterial color="#27272a" metalness={0} roughness={1} transparent opacity={0.3} />
+            </mesh>
+            {edgesGeometry && (
+              <lineSegments geometry={edgesGeometry}>
+                <lineBasicMaterial color={color} linewidth={1} />
+              </lineSegments>
+            )}
+          </>
+        )}
+      </group>
     </group>
   )
 }
@@ -246,8 +262,17 @@ const viewButtons: { view: CameraView; icon: typeof Box; label: string }[] = [
   { view: 'fit', icon: Box, label: 'Fit' },
 ]
 
+// a loose insert is modelled on the bed (z=0); an in-place insert is exported
+// in the bin's frame at the pocket floor, so it must share the bin's offset
+const IN_PLACE_MIN_Z = 1e-3
+
 export function BinPreview3D({ stlUrl, splitUrls, insertUrl }: Props) {
   const [renderMode, setRenderMode] = useState<RenderMode>('solid')
+  const [binBounds, setBinBounds] = useState<THREE.Box3 | null>(null)
+  const split = !!splitUrls && splitUrls.length > 0
+  const insertPlacement = useCallback((box: THREE.Box3): Offset => (
+    !split && binBounds && box.min.z > IN_PLACE_MIN_Z ? centreOnBed(binBounds) : centreOnBed(box)
+  ), [split, binBounds])
   const dispatchView = useCallback((view: CameraView) => {
     window.dispatchEvent(new CustomEvent('bin-preview-view', { detail: view }))
   }, [])
@@ -263,12 +288,12 @@ export function BinPreview3D({ stlUrl, splitUrls, insertUrl }: Props) {
 
         <Suspense fallback={<LoadingFallback />}>
           <Bounds clip margin={1.15}>
-            {splitUrls && splitUrls.length > 0 ? (
+            {split && splitUrls ? (
               <SplitModels urls={splitUrls} renderMode={renderMode} />
             ) : (
-              <StlModel url={stlUrl} renderMode={renderMode} />
+              <StlModel url={stlUrl} renderMode={renderMode} onBounds={setBinBounds} />
             )}
-            {insertUrl && <StlModel url={insertUrl} renderMode={renderMode} color="#ff8844" edgeColor="#7a3310" />}
+            {insertUrl && <StlModel url={insertUrl} renderMode={renderMode} color="#ff8844" edgeColor="#7a3310" placement={insertPlacement} />}
             <CameraController />
           </Bounds>
         </Suspense>

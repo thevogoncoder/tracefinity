@@ -58,7 +58,7 @@ Reference for AI agents. Check here before suggesting new features or claiming s
 - Stacking lip toggle
 - Raise lip (extend wall/lip above the floor face in 7mm units so a stacked bin clears a protruding tool)
 - Half-grid base (21mm cells for finer baseplate positioning)
-- Insert mode (contrast insert with configurable height)
+- Insert mode (contrast insert with configurable height, either loose or printed in place in the pocket floors)
 - Bed size for auto-splitting large bins
 - Partial bins (disable individual grid cells to reduce print volume)
 - Auto-size grid to fit placed tools

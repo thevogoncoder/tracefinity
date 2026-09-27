@@ -149,6 +149,9 @@ class BinParams(BaseModel):
     insert_enabled: bool = False
     insert_height: float = 1.0
     insert_clearance: float = 0.2  # mm shaved off the insert so it fits the pocket
+    # model the insert in the pocket floor, in the bin's frame, for a
+    # filament-change print; fit clearance is ignored
+    insert_in_place: bool = False
     cutout_chamfer: float = 0.0
     half_grid_base: bool = False  # use 21mm half-grid cells for the bottom baseplate
     partial_bins: bool = False

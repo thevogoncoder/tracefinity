@@ -243,7 +243,7 @@ No API key and prefer not to use the local model? Upload a mask manually:
 - **Text labels** -- Recessed or embossed text on bins
 - **Gridfinity compatible** -- Proper base profile, magnet holes, stacking lip
 - **Live 3D preview** -- See your bin in three.js before printing
-- **STL and 3MF export** -- 3MF supports multi-colour printing for embossed text
+- **STL and 3MF export** -- 3MF supports multi-colour printing for embossed text and print-in-place contrast inserts
 - **SVG export** -- Individual tool outlines as SVG, with smoothing applied
 - **Bed splitting** -- Large bins auto-split into printable pieces with diagonal fit detection
 - **Landscape and portrait** -- Paper orientation auto-detected from corner positions

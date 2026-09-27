@@ -743,7 +743,7 @@ def _generate_uncached(
     zip_path.unlink(missing_ok=True)
     insert_path.unlink(missing_ok=True)
 
-    bin_body, text_body = stl_generator.generate_bin(scaled, gen_req, str(output_path), str(threemf_path))
+    bin_body, text_body = stl_generator.generate_bin(scaled, gen_req, str(output_path))
 
     stl_urls: list[str] = []
     zip_url = None
@@ -760,6 +760,7 @@ def _generate_uncached(
         zip_url = f"/storage/{user_id}/outputs/{entity_id}_parts.zip"
 
     insert_stl_url = None
+    insert_body = None
     warning = None
     if getattr(gen_req, 'insert_enabled', False) and scaled:
         bin_width = gen_req.grid_x * GF_GRID
@@ -767,11 +768,13 @@ def _generate_uncached(
         offset_x = -bin_width / 2
         offset_y = -bin_depth / 2
         try:
-            success = stl_generator.generate_insert(scaled, gen_req, str(insert_path), offset_x, offset_y)
+            insert_body = stl_generator.build_insert(scaled, gen_req, offset_x, offset_y)
+            if insert_body is not None:
+                stl_generator.export_stl(insert_body, str(insert_path))
         except Exception:
             logger.exception("insert generation crashed")
-            success = False
-        if success:
+            insert_body = None
+        if insert_body is not None:
             insert_stl_url = f"/storage/{user_id}/outputs/{entity_id}_insert.stl"
             if zip_path.exists():
                 with zipfile.ZipFile(str(zip_path), 'a') as zf:
@@ -783,6 +786,11 @@ def _generate_uncached(
                 zip_url = f"/storage/{user_id}/outputs/{entity_id}_parts.zip"
         else:
             warning = "Insert generation failed. Try re-tracing the tools or adjusting their placement."
+
+    # a loose insert is modelled on the bed beneath the bin, so only an
+    # in-place insert belongs in the bin's multi-part 3MF object
+    in_place_insert = insert_body if getattr(gen_req, 'insert_in_place', False) else None
+    stl_generator.export_3mf(bin_body, text_body, in_place_insert, str(threemf_path))
 
     hash_path.write_text(input_hash)
 
@@ -2242,6 +2250,7 @@ def generate_bin_stl(request: Request, bin_id: str, user_id: str = Depends(get_u
         insert_enabled=bc.insert_enabled,
         insert_height=bc.insert_height,
         insert_clearance=bc.insert_clearance,
+        insert_in_place=bc.insert_in_place,
         cutout_chamfer=bc.cutout_chamfer,
         partial_bins=bc.partial_bins,
         partial_bins_values=bc.partial_bins_values,

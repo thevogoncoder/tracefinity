@@ -346,26 +346,34 @@ export function BinConfigurator({ config, onChange, autoSize, onAutoSizeChange }
         />
         {config.insert_enabled && (
           <>
+            <Toggle
+              checked={config.insert_in_place}
+              onChange={(v) => update(v ? { insert_in_place: true, insert_height: 0.2 } : { insert_in_place: false })}
+              label="Print in place"
+              help="Models the insert in the bottom of each pocket for a filament-change print. The 3MF export includes it as a part of the bin; with STLs, load both as one multi-part object. Defaults to one 0.2mm layer."
+            />
             <SliderRow
               label="Insert Height"
-              help="Thickness of the insert in mm."
+              help={config.insert_in_place ? 'Thickness of the insert in mm. Use a multiple of your layer height.' : 'Thickness of the insert in mm.'}
               value={config.insert_height}
-              min={0.5}
+              min={0.2}
               max={10}
               step={0.1}
               unit="mm"
               onChange={(v) => update({ insert_height: v })}
             />
-            <SliderRow
-              label="Insert Fit"
-              help="Clearance shaved off the insert edges so it drops into the pocket."
-              value={config.insert_clearance}
-              min={0}
-              max={1}
-              step={0.05}
-              unit="mm"
-              onChange={(v) => update({ insert_clearance: v })}
-            />
+            {!config.insert_in_place && (
+              <SliderRow
+                label="Insert Fit"
+                help="Clearance shaved off the insert edges so it drops into the pocket."
+                value={config.insert_clearance}
+                min={0}
+                max={1}
+                step={0.05}
+                unit="mm"
+                onChange={(v) => update({ insert_clearance: v })}
+              />
+            )}
           </>
         )}
       </div>
