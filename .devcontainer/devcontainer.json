@@ -23,7 +23,9 @@
   },
   "remoteEnv": {
     "PATH": "${containerWorkspaceFolder}/backend/venv/bin:${containerEnv:PATH}",
-    "NEXT_TELEMETRY_DISABLED": "1"
+    "NEXT_TELEMETRY_DISABLED": "1",
+    "NEXT_PUBLIC_API_URL": "",
+    "AUTH_MODE": "open"
   },
   "forwardPorts": [4001, 8000],
   "portsAttributes": {
