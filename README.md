@@ -162,6 +162,8 @@ make dev
 
 Open http://localhost:4001
 
+Alternatively, open the repo in a [dev container](https://containers.dev/) (VS Code: "Reopen in Container"). It runs the setup above automatically and includes Claude Code; then run `make dev`.
+
 ## Tracing Modes
 
 Tracefinity supports three ways to trace tool outlines from photos. All three produce the same output -- black and white mask images that get converted to editable polygons via OpenCV contour extraction.
